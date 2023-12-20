@@ -38,16 +38,15 @@ void get_start_and_end_indices(int* start_index, int* end_index, int rank, int p
     // Find the number of rows to calculate per process
     int rows_per_process = (size - excess_rows) / process_count;
 
+   int start_row;
+   int end_row;
+
     /*
         Calculate the start and end row indices for this process, based
         on the rank.
         The excess rows are divided up as equally as
         possible over the processes.
     */
-
-   int start_row;
-   int end_row;
-
     if (rank < excess_rows) {
         start_row = rank * rows_per_process + rank;
         end_row = start_row + rows_per_process + 1;
@@ -64,7 +63,7 @@ void get_start_and_end_indices(int* start_index, int* end_index, int rank, int p
 
 // Send the designated rows to a process
 void send_rows(double* test_array, int start_row, int end_row) {
-    
+
 }
 
 // Average the four values surrounding the input index
