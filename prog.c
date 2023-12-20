@@ -30,8 +30,8 @@ void print_double_array(double* array, int size) {
     printf("]");
 }
 
-// Get the start and end row indices for this process
-void get_start_and_end_row_indices(int* start_row, int* end_row, int rank, int process_count, int size) {
+// Get the start and end indices for this process
+void get_start_and_end_indices(int* start_index, int* end_index, int rank, int process_count, int size) {
     // Find the excess number of rows
     int excess_rows = size % process_count;
 
@@ -44,14 +44,22 @@ void get_start_and_end_row_indices(int* start_row, int* end_row, int rank, int p
         The excess rows are divided up as equally as
         possible over the processes.
     */
+
+   int start_row;
+   int end_row;
+
     if (rank < excess_rows) {
-        *start_row = rank * rows_per_process + rank;
-        *end_row = *start_row + rows_per_process + 1;
+        start_row = rank * rows_per_process + rank;
+        end_row = start_row + rows_per_process + 1;
     }
     else {
-        *start_row = rank * rows_per_process + excess_rows;
-        *end_row = *start_row + rows_per_process;
+        start_row = rank * rows_per_process + excess_rows;
+        end_row = start_row + rows_per_process;
     }
+
+    // Convert row indices to element indices
+    *start_index = start_row * size;
+    *end_index = end_row * size;
 }
 
 // Send the designated rows to a process
@@ -90,10 +98,10 @@ int main(int argc, char** argv)
 
         // Each process works on set rows based on its rank
         for (int process = 0; process < process_count; process++) {
-            int start_row;
-            int end_row;
-            get_start_and_end_row_indices(&start_row, &end_row, process, process_count, size);
-            
+            int start_index;
+            int end_index;
+            get_start_and_end_indices(&start_index, &end_index, process, process_count, size);
+            printf("\n%d, %d\n", start_index, end_index);
         }
     }
 
