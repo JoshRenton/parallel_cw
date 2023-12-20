@@ -30,34 +30,27 @@ void print_double_array(double* array, int size) {
     printf("]");
 }
 
-// Get the start and end indices for this process
-void get_start_and_end_indices(int* start_index, int* end_index, int array_length) {
-    // Get the number of processes in the cluster
-    int size_of_cluster;
-    MPI_Comm_size(MPI_COMM_WORLD, &size_of_cluster);
+// Get the start and end row indices for this process
+void get_start_and_end_row_indices(int* start_row, int* end_row, int rank, int process_count, int size) {
+    // Find the excess number of rows
+    int excess_rows = size % process_count;
 
-    // Get the unique rank of this process
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    // Find the excess number of values
-    int excess_values = array_length % size_of_cluster;
-
-    // Find the number of values to calculate per process
-    int values_per_process = (array_length - excess_values) / size_of_cluster;
+    // Find the number of rows to calculate per process
+    int rows_per_process = (size - excess_rows) / process_count;
 
     /*
-        Calculate the start and end index for this process, based
+        Calculate the start and end row indices for this process, based
         on the rank.
-        The excess values are divided up equally over the processes.
+        The excess rows are divided up as equally as
+        possible over the processes.
     */
-    if (rank < excess_values) {
-        *start_index = rank * values_per_process + rank;
-        *end_index = *start_index + values_per_process + 1;
+    if (rank < excess_rows) {
+        *start_row = rank * rows_per_process + rank;
+        *end_row = *start_row + rows_per_process + 1;
     }
     else {
-        *start_index = rank * values_per_process + excess_values;
-        *end_index = *start_index + values_per_process;
+        *start_row = rank * rows_per_process + excess_rows;
+        *end_row = *start_row + rows_per_process;
     }
 }
 
@@ -76,23 +69,27 @@ int main(int argc, char** argv)
     int size = atoi(argv[1]);
     int array_length = size * size;
 
-    /*
-        Create the test array of doubles.
-        Each process creates the test array individually.
-        The test array will still be identical for all processes.
-    */
-    double* test_array = malloc(array_length * sizeof(double));
-    create_test_array(test_array, array_length);
+    // Get the unique rank of this process
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    /*
-        Each process works on a set amount of values, based
-        on its rank.
-    */
-    int start_index;
-    int end_index;
-    get_start_and_end_indices(&start_index, &end_index, array_length);
+    // Process 0 sets up the test array and distributes the workload
+    if (rank == 0) {
+        // Create the test array
+        double* test_array = malloc(array_length * sizeof(double));
+        create_test_array(test_array, array_length);
 
-    printf("\n%d, %d\n", start_index, end_index);
+        int process_count;
+        MPI_Comm_size(MPI_COMM_WORLD, &process_count);
+
+        // Each process works on set rows based on its rank
+        for (int process = 0; process < process_count; process++) {
+            int start_row;
+            int end_row;
+            get_start_and_end_row_indices(&start_row, &end_row, process, process_count, size);
+            printf("\n%d, %d\n", start_row, end_row);
+        }
+    }
 
     // Close the MPI environment
     MPI_Finalize();
