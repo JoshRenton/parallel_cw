@@ -54,6 +54,11 @@ void get_start_and_end_row_indices(int* start_row, int* end_row, int rank, int p
     }
 }
 
+// Send the designated rows to a process
+void send_rows(double* test_array, int start_row, int end_row) {
+    
+}
+
 // Average the four values surrounding the input index
 double average(double* test_array, int size, int index) {
     double sum = test_array[index + 1] + test_array[index - 1] + test_array[index + size] + test_array[index - size];
@@ -79,6 +84,7 @@ int main(int argc, char** argv)
         double* test_array = malloc(array_length * sizeof(double));
         create_test_array(test_array, array_length);
 
+        // get the number of processes in the environment
         int process_count;
         MPI_Comm_size(MPI_COMM_WORLD, &process_count);
 
@@ -87,7 +93,7 @@ int main(int argc, char** argv)
             int start_row;
             int end_row;
             get_start_and_end_row_indices(&start_row, &end_row, process, process_count, size);
-            printf("\n%d, %d\n", start_row, end_row);
+            
         }
     }
 
