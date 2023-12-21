@@ -32,6 +32,10 @@ void print_double_array(double* array, int size) {
 
 // Get the start and end indices for this process
 void get_start_and_end_indices(int* start_index, int* end_index, int rank, int process_count, int size) {
+    // Decrement rank and process_count by 1 as process 0 does not compute values
+    process_count--;
+    rank--;
+
     // Find the excess number of rows
     int excess_rows = size % process_count;
 
@@ -62,8 +66,18 @@ void get_start_and_end_indices(int* start_index, int* end_index, int rank, int p
 }
 
 // Send the designated rows to a process
-void send_rows(double* test_array, int start_row, int end_row) {
+void send_rows(double* test_array, int start_index, int end_index, int rank) {
+    int sent_array_length = end_index - start_index;
+    double* sent_array = malloc(sent_array_length * sizeof(double));
 
+    // Copy the needed row values to sent_array
+    for (int i = 0; i < sent_array_length; i++) {
+        sent_array[i] = test_array[start_index + i];
+    }
+
+    // Send the data values to the corresponding process
+    printf("\nSending rows to process %d", rank);
+    MPI_Send(sent_array, sent_array_length, MPI_DOUBLE, rank, 0, MPI_COMM_WORLD);
 }
 
 // Average the four values surrounding the input index
@@ -91,17 +105,36 @@ int main(int argc, char** argv)
         double* test_array = malloc(array_length * sizeof(double));
         create_test_array(test_array, array_length);
 
-        // get the number of processes in the environment
+        // Get the number of processes in the environment
         int process_count;
         MPI_Comm_size(MPI_COMM_WORLD, &process_count);
 
         // Each process works on set rows based on its rank
-        for (int process = 0; process < process_count; process++) {
+        for (int process = 1; process < process_count; process++) {
             int start_index;
             int end_index;
+            // Get the start and end indices of the values for this process
             get_start_and_end_indices(&start_index, &end_index, process, process_count, size);
+            // Send the initial rows of values to this process
+            send_rows(test_array, start_index, end_index, process);
             printf("\n%d, %d\n", start_index, end_index);
         }
+    } 
+    else {
+        // Check for an incoming message from process 0
+        MPI_Status status;
+        MPI_Probe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+
+        // Get the size of the message
+        int buffer_size;
+        MPI_Get_count(&status, MPI_DOUBLE, &buffer_size);
+        printf("\n%d\n", buffer_size);
+
+        double* values = malloc(buffer_size * sizeof(double));
+
+        // Recieve the message containing the rows from process 0
+        MPI_Recv(values, buffer_size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        printf("\n%f %f\n", values[0], values[7]);
     }
 
     // Close the MPI environment
