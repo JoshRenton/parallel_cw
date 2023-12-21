@@ -86,10 +86,22 @@ double average(double* test_array, int size, int index) {
     return sum / 4.0;
 }
 
+/* 
+    Send and recieve a row of values to and from the given process.
+    The buffer argument is the row of values to send and is replaced with
+    the row of values that is recieved.
+*/
+void get_adjacent_row(int rank_of_other_process, double* buffer, int buffer_size) {
+    MPI_Sendrecv_replace(buffer, buffer_size, MPI_DOUBLE, rank_of_other_process, 1, 
+    rank_of_other_process, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+}
+
 int main(int argc, char** argv)
 {
     // Initialise the MPI environment
-    MPI_Init(&argc, &argv);
+    if (MPI_Init(&argc, &argv) != 0) {
+        exit(1);
+    }
 
     // The size of the array is passed in as a command line argument
     int size = atoi(argv[1]);
@@ -134,7 +146,6 @@ int main(int argc, char** argv)
 
         // Recieve the message containing the rows from process 0
         MPI_Recv(values, buffer_size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        printf("\n%f %f\n", values[0], values[7]);
     }
 
     // Close the MPI environment
