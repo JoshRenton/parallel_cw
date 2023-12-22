@@ -4,7 +4,7 @@
             "name": "Mac",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/opt/homebrew/Cellar/open-mpi/5.0.0/include"
+                "/opt/homebrew/Cellar/open-mpi/5.0.0_1/include"
             ],
             "defines": [],
             "macFrameworkPath": [

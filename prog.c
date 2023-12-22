@@ -109,6 +109,16 @@ void get_adjacent_row(int send_to_rank, int recieve_from_rank, double* buffer, i
     recieve_from_rank, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 }
 
+// Get the top row from process 0
+void get_top_row(double* row_above, int size) {
+    MPI_Recv(row_above, size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+}
+
+// Get the bottom row from process 0
+void get_bottom_row(double* row_below, int size) {
+    MPI_Recv(row_below, size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+}
+
 int main(int argc, char** argv)
 {
     // Initialise the MPI environment
@@ -144,6 +154,22 @@ int main(int argc, char** argv)
             send_rows(test_array, start_index, end_index, process);
         }
 
+        // Send top row of array to process 1
+        double* top_row = malloc(size * sizeof(double));
+        for (int i = 0; i < size; i++) {
+            top_row[i] = test_array[i];
+        }
+        MPI_Send(top_row, size, MPI_DOUBLE, 1, 0, MPI_COMM_WORLD);
+        free(top_row);
+
+        // Send bottom row of array to highest ranking process
+        double* bottom_row = malloc(size * sizeof(double));
+        for (int i = array_length - size; i < array_length; i++) {
+            bottom_row[i] = test_array[i];
+        }
+        MPI_Send(bottom_row, size, MPI_DOUBLE, process_count - 1, 0, MPI_COMM_WORLD);
+        free(bottom_row);
+
         free(test_array);
     }
     // All processes other than process 0
@@ -164,31 +190,39 @@ int main(int argc, char** argv)
         double* row_above;
         double* row_below;
 
-        // Process 1 does not have a row above
+        // Process 1 requests the top row from process 0
         if (rank == 1) {
-            row_above = NULL;
+            row_above = malloc(size * sizeof(double));
             row_below = malloc(size * sizeof(double));
 
             // Copy the top row of values into row_below
             for (int i = 0; i < size; i++) {
                 row_below[i] = values[i];
             }
+
+            // Get the top row of array from process 0
+            get_top_row(row_above, size);
+            printf("\nProcess %d recieved top row\n", rank);
             
-            // Only communicate with process 1 rank higher
+            // Exchange bottom row with top row of process 1 rank higher
             get_adjacent_row(rank + 1, rank + 1, row_below, size);
             printf("\nProcess %d recieved values from process %d\n", rank, rank + 1);
         }
         // Process with highest rank has no row below
         else if (rank == process_count - 1) {
             row_above = malloc(size * sizeof(double));
-            row_below = NULL;
+            row_below = malloc(size * sizeof(double));
 
             // Copy the bottom row of values into row_above
             for (int i = buffer_size - size; i < buffer_size; i++) {
                 row_above[i - (buffer_size - size)] = values[i];
             }
 
-            // Only communicate with process 1 rank lower
+            // Get the bottom row of array from process 0
+            get_bottom_row(row_below, size);
+            printf("\nProcess %d recieved bottom row\n", rank);
+
+            // Exchange top row with bottom row of process 1 rank lower
             get_adjacent_row(rank - 1, rank - 1, row_above, size);
             printf("\nProcess %d recieved values from process %d\n", rank, rank - 1);
         }
@@ -196,7 +230,7 @@ int main(int argc, char** argv)
             row_above = malloc(size * sizeof(double));
             row_below = malloc(size * sizeof(double));
 
-            // Copy the top row of values into row_above
+            // Copy the bottom row of values into row_above
             for (int i = buffer_size - size; i < buffer_size; i++) {
                 row_above[i - (buffer_size - size)] = values[i];
             }
@@ -207,7 +241,7 @@ int main(int argc, char** argv)
             get_adjacent_row(rank + 1, rank - 1, row_above, size);
             printf("\nProcess %d recieved values from process %d\n", rank, rank - 1);
 
-            // Copy the bottom row of values into row_below
+            // Copy the top row of values into row_below
             for (int i = 0; i < size; i++) {
                 row_below[i] = values[i];
             }
