@@ -39,10 +39,10 @@ void get_start_and_end_indices(int* start_index, int* end_index, int rank, int p
     rank--;
 
     // Find the excess number of rows
-    int excess_rows = size % process_count;
+    int excess_rows = (size - 2) % process_count;
 
     // Find the number of rows to calculate per process
-    int rows_per_process = (size - excess_rows) / process_count;
+    int rows_per_process = ((size - 2) - excess_rows) / process_count;
 
     int start_row;
     int end_row;
@@ -61,6 +61,10 @@ void get_start_and_end_indices(int* start_index, int* end_index, int rank, int p
         start_row = rank * rows_per_process + excess_rows;
         end_row = start_row + rows_per_process;
     }
+
+    // Shift the start and end rows up by one to ignore the first and last rows.
+    start_row++;
+    end_row++;
 
     // Convert row indices to element indices
     *start_index = start_row * size;
@@ -85,10 +89,14 @@ void send_rows(double* test_array, int start_index, int end_index, int rank) {
     free(sent_array);
 }
 
-// Average the four values surrounding the input index
-double average(double* test_array, int size, int index) {
-    double sum = test_array[index + 1] + test_array[index - 1] + test_array[index + size] + test_array[index - size];
-    return sum / 4.0;
+// Average the given values
+void average_values(double* values, double* row_above, double* row_below, int size, int buffer_size) {
+    /*
+        Stores the previous values of the row above
+        so that the averaged values do not affect the
+        the calculation of neighbouring values.
+    */
+    double* prev_row_state = malloc((size - 2) * sizeof(double));
 }
 
 /* 
@@ -147,7 +155,6 @@ int main(int argc, char** argv)
         // Get the size of the message
         int buffer_size;
         MPI_Get_count(&status, MPI_DOUBLE, &buffer_size);
-        printf("\n%d\n", buffer_size);
 
         double* values = malloc(buffer_size * sizeof(double));
 
@@ -159,6 +166,7 @@ int main(int argc, char** argv)
 
         // Process 1 does not have a row above
         if (rank == 1) {
+            row_above = NULL;
             row_below = malloc(size * sizeof(double));
 
             // Copy the top row of values into row_below
@@ -169,11 +177,11 @@ int main(int argc, char** argv)
             // Only communicate with process 1 rank higher
             get_adjacent_row(rank + 1, rank + 1, row_below, size);
             printf("\nProcess %d recieved values from process %d\n", rank, rank + 1);
-            free(row_below);
         }
         // Process with highest rank has no row below
         else if (rank == process_count - 1) {
             row_above = malloc(size * sizeof(double));
+            row_below = NULL;
 
             // Copy the bottom row of values into row_above
             for (int i = buffer_size - size; i < buffer_size; i++) {
@@ -183,7 +191,6 @@ int main(int argc, char** argv)
             // Only communicate with process 1 rank lower
             get_adjacent_row(rank - 1, rank - 1, row_above, size);
             printf("\nProcess %d recieved values from process %d\n", rank, rank - 1);
-            free(row_above);
         }
         else {
             row_above = malloc(size * sizeof(double));
@@ -210,10 +217,10 @@ int main(int argc, char** argv)
             */
             get_adjacent_row(rank - 1, rank + 1, row_below, size);
             printf("\nProcess %d recieved values from process %d\n", rank, rank + 1);
-            free(row_above);
-            free(row_below);
         }
-
+        // Free allocated memory
+        free(row_below);
+        free(row_above);
         free(values);
     }
 
