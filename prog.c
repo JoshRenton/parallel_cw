@@ -1,5 +1,7 @@
 #include "prog.h"
 
+// Currently broken when using 2 processes as the process should not get either the row above or the row below
+
 // Create a test array of the given size with a fixed pattern
 void create_test_array(double* test_array, int array_length) {
     for (int i = 0; i < array_length; i++) {
@@ -42,8 +44,8 @@ void get_start_and_end_indices(int* start_index, int* end_index, int rank, int p
     // Find the number of rows to calculate per process
     int rows_per_process = (size - excess_rows) / process_count;
 
-   int start_row;
-   int end_row;
+    int start_row;
+    int end_row;
 
     /*
         Calculate the start and end row indices for this process, based
@@ -77,7 +79,10 @@ void send_rows(double* test_array, int start_index, int end_index, int rank) {
 
     // Send the data values to the corresponding process
     printf("\nSending rows to process %d", rank);
-    MPI_Send(sent_array, sent_array_length, MPI_DOUBLE, rank, 0, MPI_COMM_WORLD);
+    if (MPI_Send(sent_array, sent_array_length, MPI_DOUBLE, rank, 0, MPI_COMM_WORLD) != 0) {
+        printf("\nFailed to send rows to process %d\n", rank);
+    }
+    free(sent_array);
 }
 
 // Average the four values surrounding the input index
@@ -87,13 +92,13 @@ double average(double* test_array, int size, int index) {
 }
 
 /* 
-    Send and recieve a row of values to and from the given process.
-    The buffer argument is the row of values to send and is replaced with
-    the row of values that is recieved.
+    Send a row of values to one process and recieve a row of values
+    from another process. The recieved row of values replaces
+    the sent row of values.
 */
-void get_adjacent_row(int rank_of_other_process, double* buffer, int buffer_size) {
-    MPI_Sendrecv_replace(buffer, buffer_size, MPI_DOUBLE, rank_of_other_process, 1, 
-    rank_of_other_process, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+void get_adjacent_row(int send_to_rank, int recieve_from_rank, double* buffer, int buffer_size) {
+    MPI_Sendrecv_replace(buffer, buffer_size, MPI_DOUBLE, send_to_rank, 1, 
+    recieve_from_rank, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 }
 
 int main(int argc, char** argv)
@@ -111,15 +116,15 @@ int main(int argc, char** argv)
     int rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+    // Get the number of processes in the environment
+    int process_count;
+    MPI_Comm_size(MPI_COMM_WORLD, &process_count);
+
     // Process 0 sets up the test array and distributes the workload
     if (rank == 0) {
         // Create the test array
         double* test_array = malloc(array_length * sizeof(double));
         create_test_array(test_array, array_length);
-
-        // Get the number of processes in the environment
-        int process_count;
-        MPI_Comm_size(MPI_COMM_WORLD, &process_count);
 
         // Each process works on set rows based on its rank
         for (int process = 1; process < process_count; process++) {
@@ -129,9 +134,11 @@ int main(int argc, char** argv)
             get_start_and_end_indices(&start_index, &end_index, process, process_count, size);
             // Send the initial rows of values to this process
             send_rows(test_array, start_index, end_index, process);
-            printf("\n%d, %d\n", start_index, end_index);
         }
-    } 
+
+        free(test_array);
+    }
+    // All processes other than process 0
     else {
         // Check for an incoming message from process 0
         MPI_Status status;
@@ -146,9 +153,70 @@ int main(int argc, char** argv)
 
         // Recieve the message containing the rows from process 0
         MPI_Recv(values, buffer_size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        double* row_above;
+        double* row_below;
+
+        // Process 1 does not have a row above
+        if (rank == 1) {
+            row_below = malloc(size * sizeof(double));
+
+            // Copy the top row of values into row_below
+            for (int i = 0; i < size; i++) {
+                row_below[i] = values[i];
+            }
+            
+            // Only communicate with process 1 rank higher
+            get_adjacent_row(rank + 1, rank + 1, row_below, size);
+            printf("\nProcess %d recieved values from process %d\n", rank, rank + 1);
+            free(row_below);
+        }
+        // Process with highest rank has no row below
+        else if (rank == process_count - 1) {
+            row_above = malloc(size * sizeof(double));
+
+            // Copy the bottom row of values into row_above
+            for (int i = buffer_size - size; i < buffer_size; i++) {
+                row_above[i - (buffer_size - size)] = values[i];
+            }
+
+            // Only communicate with process 1 rank lower
+            get_adjacent_row(rank - 1, rank - 1, row_above, size);
+            printf("\nProcess %d recieved values from process %d\n", rank, rank - 1);
+            free(row_above);
+        }
+        else {
+            row_above = malloc(size * sizeof(double));
+            row_below = malloc(size * sizeof(double));
+
+            // Copy the top row of values into row_above
+            for (int i = buffer_size - size; i < buffer_size; i++) {
+                row_above[i - (buffer_size - size)] = values[i];
+            }
+            /*
+                Send bottom row to process 1 rank higher.
+                Recieve row above from process 1 rank lower.
+            */
+            get_adjacent_row(rank + 1, rank - 1, row_above, size);
+            printf("\nProcess %d recieved values from process %d\n", rank, rank - 1);
+
+            // Copy the bottom row of values into row_below
+            for (int i = 0; i < size; i++) {
+                row_below[i] = values[i];
+            }
+            /*
+                Send top row to process 1 rank lower.
+                Recieve row below from process 1 rank higher.
+            */
+            get_adjacent_row(rank - 1, rank + 1, row_below, size);
+            printf("\nProcess %d recieved values from process %d\n", rank, rank + 1);
+            free(row_above);
+            free(row_below);
+        }
+
+        free(values);
     }
 
-    // Close the MPI environment
     MPI_Finalize();
     return 0;
 }
