@@ -21,15 +21,15 @@ void create_test_array(double* test_array, int array_length) {
 }
 
 // Prints the provided array of doubles
-void print_double_array(double* array, int size) {
-    printf("[");
-    for (int row = 0; row < size; row ++) {
-        for (int column = 0; column < size; column++) {
-            printf("%f, ", array[row * size + column]);
+void print_double_array(double* array, int width, int height) {
+    printf("\n[");
+    for (int row = 0; row < height; row ++) {
+        for (int column = 0; column < width; column++) {
+            printf("%f, ", array[row * width + column]);
         }
         printf("\n");
     }
-    printf("]");
+    printf("]\n");
 }
 
 // Get the start and end indices for this process
@@ -97,6 +97,56 @@ void average_values(double* values, double* row_above, double* row_below, int si
         the calculation of neighbouring values.
     */
     double* prev_row_state = malloc((size - 2) * sizeof(double));
+
+    int rows = buffer_size / size;
+
+    for (int row = 0; row < rows; row++) {
+        for (int column = 1; column < size - 1; column++) {
+            int index = row * size + column;
+            double sum;
+            // The case of the process only having one row to work on
+            if (rows == 1) {
+                // Store current value before updating
+                prev_row_state[column - 1] = values[index];
+                if (column == 1) {
+                    sum = values[index - 1] + values[index + 1] + row_above[column] + row_below[column];
+                }
+                else {
+                    sum = prev_row_state[column - 2] + values[index + 1] + row_above[column] + row_below[column];
+                }
+            }
+            else if (row == 0) {
+                prev_row_state[column - 1] = values[index];
+                if (column == 1) {
+                    sum = values[index - 1] + values[index + 1] + row_above[column] + values[index + size];
+                }
+                else {
+                    sum = prev_row_state[column - 2] + values[index + 1] + row_above[column] + values[index + size];
+                }
+            }
+            else if (row == rows - 1) {
+                prev_row_state[column - 1] = values[index];
+                if (column == 1) {
+                    sum = values[index - 1] + values[index + 1] + values[index - size] + row_below[column];
+                }
+                else {
+                    sum = prev_row_state[column - 2] + values[index + 1] + values[index - size] + row_below[column];
+                }
+            }
+            else {
+                prev_row_state[column - 1] = values[index];
+                if (column == 1) {
+                    sum = values[index - 1] + values[index + 1] + prev_row_state[column - 1] + values[index + size];
+                }
+                else {
+                    sum = prev_row_state[column - 2] + values[index + 1] + prev_row_state[column - 1] + values[index + size];
+                }
+            }
+            values[index] = sum / 4.0;
+        }
+    }
+
+    free(prev_row_state);
 }
 
 /* 
@@ -195,9 +245,9 @@ int main(int argc, char** argv)
             row_above = malloc(size * sizeof(double));
             row_below = malloc(size * sizeof(double));
 
-            // Copy the top row of values into row_below
-            for (int i = 0; i < size; i++) {
-                row_below[i] = values[i];
+            // Copy the bottom row of values into row_below
+            for (int i = buffer_size - size; i < buffer_size; i++) {
+                row_below[i - (buffer_size - size)] = values[i];
             }
 
             // Get the top row of array from process 0
@@ -207,15 +257,20 @@ int main(int argc, char** argv)
             // Exchange bottom row with top row of process 1 rank higher
             get_adjacent_row(rank + 1, rank + 1, row_below, size);
             printf("\nProcess %d recieved values from process %d\n", rank, rank + 1);
+
+            average_values(values, row_above, row_below, size, buffer_size / size);
+
+            printf("\n%d\n", rank);
+            print_double_array(values, size, buffer_size / size);
         }
         // Process with highest rank has no row below
         else if (rank == process_count - 1) {
             row_above = malloc(size * sizeof(double));
             row_below = malloc(size * sizeof(double));
 
-            // Copy the bottom row of values into row_above
-            for (int i = buffer_size - size; i < buffer_size; i++) {
-                row_above[i - (buffer_size - size)] = values[i];
+            // Copy the top row of values into row_above
+            for (int i = 0; i < size; i++) {
+                row_above[i] = values[i];
             }
 
             // Get the bottom row of array from process 0
@@ -225,6 +280,11 @@ int main(int argc, char** argv)
             // Exchange top row with bottom row of process 1 rank lower
             get_adjacent_row(rank - 1, rank - 1, row_above, size);
             printf("\nProcess %d recieved values from process %d\n", rank, rank - 1);
+
+            average_values(values, row_above, row_below, size, buffer_size);
+
+            printf("\n%d\n", rank);
+            print_double_array(values, size, buffer_size / size);
         }
         else {
             row_above = malloc(size * sizeof(double));
@@ -251,6 +311,11 @@ int main(int argc, char** argv)
             */
             get_adjacent_row(rank - 1, rank + 1, row_below, size);
             printf("\nProcess %d recieved values from process %d\n", rank, rank + 1);
+
+            average_values(values, row_above, row_below, size, buffer_size);
+
+            printf("\n%d\n", rank);
+            print_double_array(values, size, buffer_size / size);
         }
         // Free allocated memory
         free(row_below);
