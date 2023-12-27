@@ -17,6 +17,9 @@ void create_test_array(double* test_array, int array_length) {
         else if (i % 2 == 0) {
             test_array[i] = 0.2;
         }
+        else {
+            test_array[i] = 0.0;
+        }
     }  
 }
 
@@ -71,16 +74,8 @@ void get_start_and_end_indices(int* start_index, int* end_index, int rank, int p
     *end_index = end_row * size;
 }
 
-// Send the designated rows to a process
-void send_rows(double* test_array, int start_index, int end_index, int rank) {
-    int sent_array_length = end_index - start_index;
-    double* sent_array = malloc(sent_array_length * sizeof(double));
-
-    // Copy the needed row values to sent_array
-    for (int i = 0; i < sent_array_length; i++) {
-        sent_array[i] = test_array[start_index + i];
-    }
-
+// Send the given rows to the given process
+void send_rows(double* sent_array, int sent_array_length, int rank) {
     // Send the data values to the corresponding process
     printf("\nSending rows to process %d", rank);
     if (MPI_Send(sent_array, sent_array_length, MPI_DOUBLE, rank, 0, MPI_COMM_WORLD) != 0) {
@@ -169,6 +164,37 @@ void get_bottom_row(double* row_below, int size) {
     MPI_Recv(row_below, size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 }
 
+/*
+    For process 0.
+    Recieves the final values from a process and
+    writes them to the test array.
+*/
+void recieve_and_write(double* test_array, int process, int* current_index) {
+    // Check for an incoming message from process
+    MPI_Status status;
+    MPI_Probe(process, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+
+    // Get the size of the message
+    int buffer_size;
+    MPI_Get_count(&status, MPI_DOUBLE, &buffer_size);
+
+    double* values = malloc(buffer_size * sizeof(double));
+
+    // Recieve the message containing the rows from process
+    MPI_Recv(values, buffer_size, MPI_DOUBLE, process, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    // Write averaged values to test array
+    for (int i = *current_index; i < *current_index + buffer_size; i++) {
+        test_array[i] = values[i - *current_index];
+    }
+
+    *current_index += buffer_size;
+
+    printf("\nRecieved values from process %d up to index %d\n", process, *current_index);
+
+    free(values);
+}
+
 int main(int argc, char** argv)
 {
     // Initialise the MPI environment
@@ -200,8 +226,16 @@ int main(int argc, char** argv)
             int end_index;
             // Get the start and end indices of the values for this process
             get_start_and_end_indices(&start_index, &end_index, process, process_count, size);
+            
+            int sent_array_length = end_index - start_index;
+            double* sent_array = malloc(sent_array_length * sizeof(double));
+
+            // Copy the needed row values to sent_array
+            for (int i = 0; i < sent_array_length; i++) {
+                sent_array[i] = test_array[start_index + i];
+            }
             // Send the initial rows of values to this process
-            send_rows(test_array, start_index, end_index, process);
+            send_rows(sent_array, sent_array_length, process);
         }
 
         // Send top row of array to process 1
@@ -215,10 +249,18 @@ int main(int argc, char** argv)
         // Send bottom row of array to highest ranking process
         double* bottom_row = malloc(size * sizeof(double));
         for (int i = array_length - size; i < array_length; i++) {
-            bottom_row[i] = test_array[i];
+            bottom_row[i - (array_length - size)] = test_array[i];
         }
         MPI_Send(bottom_row, size, MPI_DOUBLE, process_count - 1, 0, MPI_COMM_WORLD);
         free(bottom_row);
+
+        int current_index = size;
+        // Recieve all averaged values from each process
+        for (int process = 1; process < process_count; process++) {
+            recieve_and_write(test_array, process, &current_index);
+        }
+
+        print_double_array(test_array, size, size);
 
         free(test_array);
     }
@@ -240,7 +282,8 @@ int main(int argc, char** argv)
         double* row_above;
         double* row_below;
 
-        // Process 1 requests the top row from process 0
+        // Process 1 gets the top row from process 0
+        // THIS IS CURRENTLY BROKEN WHEN USING ONLY 2 PROCESSES
         if (rank == 1) {
             row_above = malloc(size * sizeof(double));
             row_below = malloc(size * sizeof(double));
@@ -258,12 +301,15 @@ int main(int argc, char** argv)
             get_adjacent_row(rank + 1, rank + 1, row_below, size);
             printf("\nProcess %d recieved values from process %d\n", rank, rank + 1);
 
-            average_values(values, row_above, row_below, size, buffer_size / size);
+            average_values(values, row_above, row_below, size, buffer_size);
 
-            printf("\n%d\n", rank);
-            print_double_array(values, size, buffer_size / size);
+            // Send resulting values back to process 0
+            send_rows(values, buffer_size, 0);
+
+            // printf("\n%d\n", rank);
+            // print_double_array(values, size, buffer_size / size);
         }
-        // Process with highest rank has no row below
+        // The highest ranking process gets the bottom row from process 0
         else if (rank == process_count - 1) {
             row_above = malloc(size * sizeof(double));
             row_below = malloc(size * sizeof(double));
@@ -283,8 +329,11 @@ int main(int argc, char** argv)
 
             average_values(values, row_above, row_below, size, buffer_size);
 
-            printf("\n%d\n", rank);
-            print_double_array(values, size, buffer_size / size);
+            // Send resulting values back to process 0
+            send_rows(values, buffer_size, 0);
+
+            // printf("\n%d\n", rank);
+            // print_double_array(values, size, buffer_size / size);
         }
         else {
             row_above = malloc(size * sizeof(double));
@@ -314,15 +363,18 @@ int main(int argc, char** argv)
 
             average_values(values, row_above, row_below, size, buffer_size);
 
-            printf("\n%d\n", rank);
-            print_double_array(values, size, buffer_size / size);
+            // Send resulting values back to process 0
+            send_rows(values, buffer_size, 0);
+
+            // printf("\n%d\n", rank);
+            // print_double_array(values, size, buffer_size / size);
         }
         // Free allocated memory
         free(row_below);
         free(row_above);
-        free(values);
     }
 
+    // Close MPI environment
     MPI_Finalize();
     return 0;
 }
