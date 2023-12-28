@@ -1,7 +1,5 @@
 #include "prog.h"
 
-// Currently broken when using 2 processes as the process should not get either the row above or the row below
-
 // Returns the absolute value of a double
 double absolute(double value) {
     if (value < 0.0) {
@@ -130,10 +128,10 @@ int average_values(double* values, double* row_above, double* row_below, int siz
             }
             else if (row == rows - 1) {
                 if (column == 1) {
-                    sum = values[index - 1] + values[index + 1] + values[index - size] + row_below[column];
+                    sum = values[index - 1] + values[index + 1] + prev_row_state[column - 1] + row_below[column];
                 }
                 else {
-                    sum = prev_row_state[column - 2] + values[index + 1] + values[index - size] + row_below[column];
+                    sum = prev_row_state[column - 2] + values[index + 1] + prev_row_state[column - 1] + row_below[column];
                 }
             }
             else {
@@ -249,13 +247,13 @@ int main(int argc, char** argv)
     // This will be turned to 0 to indicate that a process is not below the required precision
     int within_precision;
 
-    // Process 0 sets up the test array and distributes the workload
+    // Process 0 sets up the test array and distributes the workload among the other processes
     if (rank == 0) {
         // Create the test array
         double* test_array = malloc(array_length * sizeof(double));
         create_test_array(test_array, array_length);
 
-        // Each process works on set rows based on its rank
+        // Each process works on an (almost) equal number of consecutive rows based on its rank
         for (int process = 1; process < process_count; process++) {
             int start_index;
             int end_index;
@@ -324,14 +322,13 @@ int main(int argc, char** argv)
 
         double* values = malloc(buffer_size * sizeof(double));
 
-        // Recieve the message containing the rows from process 0
+        // Recieve the message containing the rows to work on from process 0
         MPI_Recv(values, buffer_size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         double* row_above;
         double* row_below;
 
         // Process 1 gets the top row from process 0
-        // THIS IS CURRENTLY BROKEN WHEN USING ONLY 2 PROCESSES
         if (rank == 1) {
             // Get the top row of array from process 0
             row_above = malloc(size * sizeof(double));
@@ -339,17 +336,22 @@ int main(int argc, char** argv)
             // printf("\nProcess %d recieved top row\n", rank);
 
             row_below = malloc(size * sizeof(double));
+            // If there are only 2 process, get the bottom row from process 0
+            if (process_count == 2) {
+                get_bottom_row(row_below, size);
+            }
 
             int stop;
 
             do {
                 // Copy the bottom row of values into row_below
-                for (int i = buffer_size - size; i < buffer_size; i++) {
-                    row_below[i - (buffer_size - size)] = values[i];
+                if (process_count != 2) {
+                    for (int i = buffer_size - size; i < buffer_size; i++) {
+                        row_below[i - (buffer_size - size)] = values[i];
+                    }  
+                    // Exchange bottom row with top row of process 1 rank higher
+                    get_adjacent_row(rank + 1, rank + 1, row_below, size);
                 }
-            
-                // Exchange bottom row with top row of process 1 rank higher
-                get_adjacent_row(rank + 1, rank + 1, row_below, size);
                 // printf("\nProcess %d recieved values from process %d\n", rank, rank + 1);
 
                 stop = average_values(values, row_above, row_below, size, buffer_size, &precision);
