@@ -330,7 +330,7 @@ int main(int argc, char** argv)
 
         // Process 1 gets the top row from process 0
         if (rank == 1) {
-            // Get the top row of array from process 0
+            // Get the top row of array from process 0, this is only done once as it will not change
             row_above = malloc(size * sizeof(double));
             get_top_row(row_above, size);
             // printf("\nProcess %d recieved top row\n", rank);
@@ -369,7 +369,7 @@ int main(int argc, char** argv)
         }
         // The highest ranking process gets the bottom row from process 0
         else if (rank == process_count - 1) {
-            // Get the bottom row of array from process 0
+            // Get the bottom row of array from process 0, this is only done once as it will not change
             row_below = malloc(size * sizeof(double));
             get_bottom_row(row_below, size);
             // printf("\nProcess %d recieved bottom row\n", rank);
