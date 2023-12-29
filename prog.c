@@ -206,7 +206,7 @@ void recieve_and_write(double* test_array, int process, int* current_index) {
 
     *current_index += buffer_size;
 
-    printf("\nRecieved values from process %d up to index %d\n", process, *current_index);
+    printf("\nReceived values from process %d up to index %d\n", process, *current_index);
 
     free(values);
 }
@@ -252,6 +252,8 @@ int main(int argc, char** argv)
         // Create the test array
         double* test_array = malloc(array_length * sizeof(double));
         create_test_array(test_array, array_length);
+
+        print_double_array(test_array, size, size);
 
         // Each process works on an (almost) equal number of consecutive rows based on its rank
         for (int process = 1; process < process_count; process++) {
