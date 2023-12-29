@@ -333,7 +333,6 @@ int main(int argc, char** argv)
             // Get the top row of array from process 0, this is only done once as it will not change
             row_above = malloc(size * sizeof(double));
             get_top_row(row_above, size);
-            // printf("\nProcess %d recieved top row\n", rank);
 
             row_below = malloc(size * sizeof(double));
             // If there are only 2 process, get the bottom row from process 0
@@ -352,27 +351,22 @@ int main(int argc, char** argv)
                     // Exchange bottom row with top row of process 1 rank higher
                     get_adjacent_row(rank + 1, rank + 1, row_below, size);
                 }
-                // printf("\nProcess %d recieved values from process %d\n", rank, rank + 1);
 
                 stop = average_values(values, row_above, row_below, size, buffer_size, &precision);
 
-                // Send value of stop to process 0 and check if this should stop
+                // Send value of stop to process 0 and recieve the signal to stop or continue
                 MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
             while (stop != 1);
 
             // Send resulting values back to process 0
             send_rows(values, buffer_size, 0);
-
-            // printf("\n%d\n", rank);
-            // print_double_array(values, size, buffer_size / size);
         }
         // The highest ranking process gets the bottom row from process 0
         else if (rank == process_count - 1) {
             // Get the bottom row of array from process 0, this is only done once as it will not change
             row_below = malloc(size * sizeof(double));
             get_bottom_row(row_below, size);
-            // printf("\nProcess %d recieved bottom row\n", rank);
 
             row_above = malloc(size * sizeof(double));
 
@@ -386,20 +380,16 @@ int main(int argc, char** argv)
 
                 // Exchange top row with bottom row of process 1 rank lower
                 get_adjacent_row(rank - 1, rank - 1, row_above, size);
-                // printf("\nProcess %d recieved values from process %d\n", rank, rank - 1);
 
                 stop = average_values(values, row_above, row_below, size, buffer_size, &precision);
 
-                // Send value of stop to process 0 and check if this should stop
+                // Send value of stop to process 0 and recieve the signal to stop or continue
                 MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
             while (stop != 1);
 
             // Send resulting values back to process 0
             send_rows(values, buffer_size, 0);
-
-            // printf("\n%d\n", rank);
-            // print_double_array(values, size, buffer_size / size);
         }
         else {
             row_above = malloc(size * sizeof(double));
@@ -417,7 +407,6 @@ int main(int argc, char** argv)
                     Recieve row above from process 1 rank lower.
                 */
                 get_adjacent_row(rank + 1, rank - 1, row_above, size);
-                // printf("\nProcess %d recieved values from process %d\n", rank, rank - 1);
 
                 // Copy the top row of values into row_below
                 for (int i = 0; i < size; i++) {
@@ -428,20 +417,16 @@ int main(int argc, char** argv)
                     Recieve row below from process 1 rank higher.
                 */
                 get_adjacent_row(rank - 1, rank + 1, row_below, size);
-                // printf("\nProcess %d recieved values from process %d\n", rank, rank + 1);
 
                 stop = average_values(values, row_above, row_below, size, buffer_size, &precision);
 
-                // Send value of stop to process 0 and check if this should stop
+                // Send value of stop to process 0 and recieve the signal to stop or continue
                 MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
             while (stop != 1);
 
             // Send resulting values back to process 0
             send_rows(values, buffer_size, 0);
-
-            // printf("\n%d\n", rank);
-            // print_double_array(values, size, buffer_size / size);
         }
         // Free allocated memory
         free(row_below);
