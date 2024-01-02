@@ -1,15 +1,5 @@
 #include "prog.h"
 
-// Returns the absolute value of a double
-double absolute(double value) {
-    if (value < 0.0) {
-        return 0.0 - value;
-    }
-    else {
-        return value;
-    }
-}
-
 // Create a test array of the given size with a fixed pattern
 void create_test_array(double* test_array, int array_length) {
     for (int i = 0; i < array_length; i++) {
@@ -44,7 +34,8 @@ void print_double_array(double* array, int width, int height) {
 }
 
 // Get the start and end indices for this process
-void get_start_and_end_indices(int* start_index, int* end_index, int rank, int process_count, int size) {
+void get_start_and_end_indices(int* start_index, int* end_index, int rank, 
+int process_count, int size) {
     // Decrement rank and process_count by 1 as process 0 does not compute values
     process_count--;
     rank--;
@@ -73,7 +64,7 @@ void get_start_and_end_indices(int* start_index, int* end_index, int rank, int p
         end_row = start_row + rows_per_process;
     }
 
-    // Shift the start and end rows up by one to ignore the first and last rows.
+    // Shift the start and end rows up by one to ignore the first and last rows
     start_row++;
     end_row++;
 
@@ -85,15 +76,16 @@ void get_start_and_end_indices(int* start_index, int* end_index, int rank, int p
 // Send the given rows to the given process
 void send_rows(double* sent_array, int sent_array_length, int rank) {
     // Send the data values to the corresponding process
-    printf("\nSending rows to process %d", rank);
-    if (MPI_Send(sent_array, sent_array_length, MPI_DOUBLE, rank, 0, MPI_COMM_WORLD) != 0) {
+    if (MPI_Send(sent_array, sent_array_length, MPI_DOUBLE, rank, 0, 
+    MPI_COMM_WORLD) != 0) {
         printf("\nFailed to send rows to process %d\n", rank);
     }
     free(sent_array);
 }
 
 // Average the given values and return if within the given precision
-int average_values(double* values, double* row_above, double* row_below, int size, int buffer_size, double* precision) {
+int average_values(double* values, double* row_above, double* row_below, 
+int size, int buffer_size, double* precision) {
     /*
         Stores the previous values of the row above
         so that the averaged values do not affect the
@@ -112,34 +104,42 @@ int average_values(double* values, double* row_above, double* row_below, int siz
             // The case of the process only having one row to work on
             if (rows == 1) {
                 if (column == 1) {
-                    sum = values[index - 1] + values[index + 1] + row_above[column] + row_below[column];
+                    sum = values[index - 1] + values[index + 1]
+                     + row_above[column] + row_below[column];
                 }
                 else {
-                    sum = prev_row_state[column - 2] + values[index + 1] + row_above[column] + row_below[column];
+                    sum = prev_row_state[column - 2] + values[index + 1]
+                     + row_above[column] + row_below[column];
                 }
             }
             else if (row == 0) {
                 if (column == 1) {
-                    sum = values[index - 1] + values[index + 1] + row_above[column] + values[index + size];
+                    sum = values[index - 1] + values[index + 1]
+                     + row_above[column] + values[index + size];
                 }
                 else {
-                    sum = prev_row_state[column - 2] + values[index + 1] + row_above[column] + values[index + size];
+                    sum = prev_row_state[column - 2] + values[index + 1]
+                     + row_above[column] + values[index + size];
                 }
             }
             else if (row == rows - 1) {
                 if (column == 1) {
-                    sum = values[index - 1] + values[index + 1] + prev_row_state[column - 1] + row_below[column];
+                    sum = values[index - 1] + values[index + 1]
+                     + prev_row_state[column - 1] + row_below[column];
                 }
                 else {
-                    sum = prev_row_state[column - 2] + values[index + 1] + prev_row_state[column - 1] + row_below[column];
+                    sum = prev_row_state[column - 2] + values[index + 1]
+                     + prev_row_state[column - 1] + row_below[column];
                 }
             }
             else {
                 if (column == 1) {
-                    sum = values[index - 1] + values[index + 1] + prev_row_state[column - 1] + values[index + size];
+                    sum = values[index - 1] + values[index + 1]
+                     + prev_row_state[column - 1] + values[index + size];
                 }
                 else {
-                    sum = prev_row_state[column - 2] + values[index + 1] + prev_row_state[column - 1] + values[index + size];
+                    sum = prev_row_state[column - 2] + values[index + 1]
+                     + prev_row_state[column - 1] + values[index + size];
                 }
             }
             // Store current value before updating
@@ -150,7 +150,7 @@ int average_values(double* values, double* row_above, double* row_below, int siz
 
             // Check if within the required precision
             if (within_precision != 0) {
-                if (absolute(values[index] - prev_row_state[column - 1]) > *precision) {
+                if (fabs(values[index] - prev_row_state[column - 1]) > *precision) {
                     within_precision = 0;
                 }
             }
@@ -165,19 +165,22 @@ int average_values(double* values, double* row_above, double* row_below, int siz
     from another process. The recieved row of values replaces
     the sent row of values.
 */
-void get_adjacent_row(int send_to_rank, int recieve_from_rank, double* buffer, int buffer_size) {
+void get_adjacent_row(int send_to_rank, int recieve_from_rank, double* buffer, 
+int buffer_size) {
     MPI_Sendrecv_replace(buffer, buffer_size, MPI_DOUBLE, send_to_rank, 1, 
     recieve_from_rank, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 }
 
 // Get the top row from process 0
 void get_top_row(double* row_above, int size) {
-    MPI_Recv(row_above, size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(row_above, size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, 
+    MPI_STATUS_IGNORE);
 }
 
 // Get the bottom row from process 0
 void get_bottom_row(double* row_below, int size) {
-    MPI_Recv(row_below, size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(row_below, size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, 
+    MPI_STATUS_IGNORE);
 }
 
 /*
@@ -197,7 +200,8 @@ void recieve_and_write(double* test_array, int process, int* current_index) {
     double* values = malloc(buffer_size * sizeof(double));
 
     // Recieve the message containing the rows from process
-    MPI_Recv(values, buffer_size, MPI_DOUBLE, process, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(values, buffer_size, MPI_DOUBLE, process, MPI_ANY_TAG, 
+    MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
     // Write averaged values to test array
     for (int i = *current_index; i < *current_index + buffer_size; i++) {
@@ -206,16 +210,21 @@ void recieve_and_write(double* test_array, int process, int* current_index) {
 
     *current_index += buffer_size;
 
-    printf("\nReceived values from process %d up to index %d\n", process, *current_index);
-
     free(values);
 }
 
-// Check if the given process is within the required precision, and update within_precision if necessary
+/*
+    Check if the given process is within the required precision
+    and update within_precision if necessary
+*/
 void check_precision(int rank, int* within_precision) {
     int* buffer = malloc(sizeof(int));
-    MPI_Recv(buffer, 1, MPI_INT, rank, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    // If within_precision is not 0, set it to 0 to indicate that another iteration is needed
+    MPI_Recv(buffer, 1, MPI_INT, rank, MPI_ANY_TAG, MPI_COMM_WORLD, 
+    MPI_STATUS_IGNORE);
+    /*
+        If within_precision is not 0, set it to 0
+        to indicate that another iteration is needed
+    */
     if (*buffer == 0 && *within_precision != 0) {
         *within_precision = 0;
     }
@@ -244,23 +253,33 @@ int main(int argc, char** argv)
     int process_count;
     MPI_Comm_size(MPI_COMM_WORLD, &process_count);
 
-    // This will be turned to 0 to indicate that a process is not below the required precision
+    /*
+        This will be turned to 0 to indicate that a process
+        is not below the required precision
+    */
     int within_precision;
 
-    // Process 0 sets up the test array and distributes the workload among the other processes
+    /*
+        Process 0 sets up the test array and distributes
+        the workload among the other processes
+    */
     if (rank == 0) {
         // Create the test array
         double* test_array = malloc(array_length * sizeof(double));
         create_test_array(test_array, array_length);
 
-        print_double_array(test_array, size, size);
+        // print_double_array(test_array, size, size);
 
-        // Each process works on an (almost) equal number of consecutive rows based on its rank
+        /*
+            Each process works on an (almost) equal number
+            of consecutive rows based on its rank
+        */
         for (int process = 1; process < process_count; process++) {
             int start_index;
             int end_index;
             // Get the start and end indices of the values for this process
-            get_start_and_end_indices(&start_index, &end_index, process, process_count, size);
+            get_start_and_end_indices(&start_index, &end_index, process, 
+            process_count, size);
             
             int sent_array_length = end_index - start_index;
             double* sent_array = malloc(sent_array_length * sizeof(double));
@@ -286,7 +305,8 @@ int main(int argc, char** argv)
         for (int i = array_length - size; i < array_length; i++) {
             bottom_row[i - (array_length - size)] = test_array[i];
         }
-        MPI_Send(bottom_row, size, MPI_DOUBLE, process_count - 1, 0, MPI_COMM_WORLD);
+        MPI_Send(bottom_row, size, MPI_DOUBLE, process_count - 1, 0, 
+        MPI_COMM_WORLD);
         free(bottom_row);
 
         do {
@@ -295,9 +315,13 @@ int main(int argc, char** argv)
             for (int process = 1; process < process_count; process++) {
                 check_precision(process, &within_precision);
             }
-            // Communicate to all other processes if they should continue or not
+            /*
+                Send signal to all other processes, indicating
+                if they should continue or not
+            */
             for (int process = 1; process < process_count; process++) {
-                MPI_Send(&within_precision, 1, MPI_INT, process, 0, MPI_COMM_WORLD);
+                MPI_Send(&within_precision, 1, MPI_INT, process, 0, 
+                MPI_COMM_WORLD);
             }
         }
         while (within_precision != 1);
@@ -308,7 +332,7 @@ int main(int argc, char** argv)
             recieve_and_write(test_array, process, &current_index);
         }
 
-        print_double_array(test_array, size, size);
+        // print_double_array(test_array, size, size);
 
         free(test_array);
     }
@@ -325,14 +349,18 @@ int main(int argc, char** argv)
         double* values = malloc(buffer_size * sizeof(double));
 
         // Recieve the message containing the rows to work on from process 0
-        MPI_Recv(values, buffer_size, MPI_DOUBLE, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(values, buffer_size, MPI_DOUBLE, 0, MPI_ANY_TAG, 
+        MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
         double* row_above;
         double* row_below;
 
         // Process 1 gets the top row from process 0
         if (rank == 1) {
-            // Get the top row of array from process 0, this is only done once as it will not change
+            /*
+                Get the top row of array from process 0, this 
+                is only done once as it will not change
+            */
             row_above = malloc(size * sizeof(double));
             get_top_row(row_above, size);
 
@@ -354,10 +382,15 @@ int main(int argc, char** argv)
                     get_adjacent_row(rank + 1, rank + 1, row_below, size);
                 }
 
-                stop = average_values(values, row_above, row_below, size, buffer_size, &precision);
+                stop = average_values(values, row_above, row_below, size, 
+                buffer_size, &precision);
 
-                // Send value of stop to process 0 and recieve the signal to stop or continue
-                MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                /*
+                    Send value of stop to process 0 and recieve
+                    the signal to stop or continue
+                */
+                MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, 
+                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
             while (stop != 1);
 
@@ -366,7 +399,10 @@ int main(int argc, char** argv)
         }
         // The highest ranking process gets the bottom row from process 0
         else if (rank == process_count - 1) {
-            // Get the bottom row of array from process 0, this is only done once as it will not change
+            /*
+                Get the bottom row of array from process 0, this
+                is only done once as it will not change
+            */
             row_below = malloc(size * sizeof(double));
             get_bottom_row(row_below, size);
 
@@ -383,10 +419,15 @@ int main(int argc, char** argv)
                 // Exchange top row with bottom row of process 1 rank lower
                 get_adjacent_row(rank - 1, rank - 1, row_above, size);
 
-                stop = average_values(values, row_above, row_below, size, buffer_size, &precision);
+                stop = average_values(values, row_above, row_below, size, 
+                buffer_size, &precision);
 
-                // Send value of stop to process 0 and recieve the signal to stop or continue
-                MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                /*
+                    Send value of stop to process 0 and recieve
+                    the signal to stop or continue
+                */
+                MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, 
+                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
             while (stop != 1);
 
@@ -420,10 +461,15 @@ int main(int argc, char** argv)
                 */
                 get_adjacent_row(rank - 1, rank + 1, row_below, size);
 
-                stop = average_values(values, row_above, row_below, size, buffer_size, &precision);
+                stop = average_values(values, row_above, row_below, size, 
+                buffer_size, &precision);
 
-                // Send value of stop to process 0 and recieve the signal to stop or continue
-                MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                /*
+                    Send value of stop to process 0 and recieve
+                    the signal to stop or continue
+                */
+                MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, 
+                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
             while (stop != 1);
 
