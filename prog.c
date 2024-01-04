@@ -265,6 +265,7 @@ int main(int argc, char** argv)
     */
     if (rank == 0) {
         // Create the test array
+        double t1 = MPI_Wtime();
         double* test_array = malloc(array_length * sizeof(double));
         create_test_array(test_array, array_length);
 
@@ -331,6 +332,10 @@ int main(int argc, char** argv)
         for (int process = 1; process < process_count; process++) {
             recieve_and_write(test_array, process, &current_index);
         }
+
+        double t2 = MPI_Wtime();
+
+        printf("\nElapsed time: %f\n", t2 - t1);
 
         // print_double_array(test_array, size, size);
 
