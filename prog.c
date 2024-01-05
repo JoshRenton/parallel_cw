@@ -83,7 +83,10 @@ void send_rows(double* sent_array, int sent_array_length, int rank) {
     free(sent_array);
 }
 
-// Average the given values and return if within the given precision
+/*
+    Average the given values and return whether or
+    not all values are within the required precision.
+*/
 int average_values(double* values, double* row_above, double* row_below, 
 int size, int buffer_size, double* precision) {
     /*
@@ -97,6 +100,7 @@ int size, int buffer_size, double* precision) {
 
     int within_precision = 1;
 
+    // Iterate through each row, averaging the neighbours of each value
     for (int row = 0; row < rows; row++) {
         for (int column = 1; column < size - 1; column++) {
             int index = row * size + column;
@@ -145,12 +149,22 @@ int size, int buffer_size, double* precision) {
             // Store current value before updating
             prev_row_state[column - 1] = values[index];
 
-            // Update the old value with the new averaged value
+            // Update the current index with the new averaged value
             values[index] = sum / 4.0;
 
-            // Check if within the required precision
+            /*
+                Only check precision if all averaged values so
+                far have been within the required precision, as
+                only 1 value needs to be outside the precision
+                for the iteration to continue.
+            */
             if (within_precision != 0) {
-                if (fabs(values[index] - prev_row_state[column - 1]) > *precision) {
+                if (fabs(values[index] - prev_row_state[column - 1]) 
+                > *precision) {
+                    /*
+                        Set to 0 if this value is not
+                        within the required precision.
+                    */
                     within_precision = 0;
                 }
             }
@@ -184,8 +198,8 @@ void get_bottom_row(double* row_below, int size) {
 }
 
 /*
-    For process 0.
-    Recieves the final values from a process and
+    Called by process 0.
+    Recieves the final values from the specified process and
     writes them to the test array.
 */
 void recieve_and_write(double* test_array, int process, int* current_index) {
@@ -218,17 +232,18 @@ void recieve_and_write(double* test_array, int process, int* current_index) {
     and update within_precision if necessary
 */
 void check_precision(int rank, int* within_precision) {
-    int* buffer = malloc(sizeof(int));
-    MPI_Recv(buffer, 1, MPI_INT, rank, MPI_ANY_TAG, MPI_COMM_WORLD, 
+    int* stop = malloc(sizeof(int));
+    // Recieve the value of stop from the specified process rank
+    MPI_Recv(stop, 1, MPI_INT, rank, MPI_ANY_TAG, MPI_COMM_WORLD, 
     MPI_STATUS_IGNORE);
     /*
         If within_precision is not 0, set it to 0
         to indicate that another iteration is needed
     */
-    if (*buffer == 0 && *within_precision != 0) {
+    if (*stop == 0 && *within_precision != 0) {
         *within_precision = 0;
     }
-    free(buffer);
+    free(stop);
 }
 
 int main(int argc, char** argv)
@@ -269,8 +284,6 @@ int main(int argc, char** argv)
         double* test_array = malloc(array_length * sizeof(double));
         create_test_array(test_array, array_length);
 
-        // print_double_array(test_array, size, size);
-
         /*
             Each process works on an (almost) equal number
             of consecutive rows based on its rank
@@ -310,6 +323,8 @@ int main(int argc, char** argv)
         MPI_COMM_WORLD);
         free(bottom_row);
 
+        int iterations = 0;
+
         do {
             within_precision = 1;
             // Check if any process is not within the required precision
@@ -324,6 +339,7 @@ int main(int argc, char** argv)
                 MPI_Send(&within_precision, 1, MPI_INT, process, 0, 
                 MPI_COMM_WORLD);
             }
+            iterations += 1;
         }
         while (within_precision != 1);
 
@@ -336,6 +352,7 @@ int main(int argc, char** argv)
         double t2 = MPI_Wtime();
 
         printf("\nElapsed time: %f\n", t2 - t1);
+        printf("\nIterations: %d\n", iterations);
 
         // print_double_array(test_array, size, size);
 
@@ -392,7 +409,7 @@ int main(int argc, char** argv)
 
                 /*
                     Send value of stop to process 0 and recieve
-                    the signal to stop or continue
+                    the signal to stop or continue from process 0
                 */
                 MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, 
                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -429,7 +446,7 @@ int main(int argc, char** argv)
 
                 /*
                     Send value of stop to process 0 and recieve
-                    the signal to stop or continue
+                    the signal to stop or continue from process 0
                 */
                 MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, 
                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -471,7 +488,7 @@ int main(int argc, char** argv)
 
                 /*
                     Send value of stop to process 0 and recieve
-                    the signal to stop or continue
+                    the signal to stop or continue from process 0
                 */
                 MPI_Sendrecv_replace(&stop, 1, MPI_INT, 0, 0, 0, MPI_ANY_TAG, 
                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
